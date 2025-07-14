@@ -189,15 +189,16 @@ namespace fcpp
             node.storage(neighbors{}) = neighbor_count;
 
             // ex 2
-            int max_neighbors = old(CALL, 0, [&](int past_neighbors)
-                                    { return std::max(neighbor_count, past_neighbors); });
+            int max_neighbors = old(CALL, 0, [&](int past_neighbors) { 
+                return std::max(neighbor_count, past_neighbors); 
+            });
 
             node.storage(max_seen_devices{}) = max_neighbors;
 
             // ex 3
-            int net_max_neighbors = old(CALL, max_neighbors, [&](int past_max) {
-                return std::max(past_max, max_hood(CALL, nbr(CALL, max_neighbors)));
-            });
+            int net_max_neighbors = max_hood(CALL, nbr(CALL, [&](int n) {
+                return std::max(max_neighbors, n); 
+            }));
 
             node.storage(net_max_seen_devices{}) = net_max_neighbors;
 
@@ -218,7 +219,7 @@ namespace fcpp
                 node.velocity() = make_vec(0.0, 0.0);
             }
 
-            node.storage(node_size{}) = net_max_neighbors;
+            node.storage(node_size{}) = 1 + net_max_neighbors;
             node.storage(node_color{}) = color(GREEN);
             node.storage(node_shape{}) = shape::sphere;
         }

@@ -78,6 +78,10 @@ namespace fcpp
             {
             };
 
+            struct gps_traces
+            {
+            };
+
             // ... add more as needed, here and in the tuple_store<...> option below
         }
 
@@ -184,42 +188,13 @@ namespace fcpp
             // import tag names in the local scope.
             using namespace tags;
 
-            // ex 1
-            int neighbor_count = count_hood(CALL) - 1;
-            node.storage(neighbors{}) = neighbor_count;
+            auto& trace = node.net.storage(gps_traces{});
 
-            // ex 2
-            int max_neighbors = old(CALL, 0, [&](int past_neighbors) { 
-                return std::max(neighbor_count, past_neighbors); 
-            });
-
-            node.storage(max_seen_devices{}) = max_neighbors;
-
-            // ex 3
-            int net_max_neighbors = max_hood(CALL, nbr(CALL, [&](int n) {
-                return std::max(max_neighbors, n); 
-            }));
-
-            node.storage(net_max_seen_devices{}) = net_max_neighbors;
-
-            // ex 4
-            std::tuple<int, vec<2>> data = std::make_tuple(static_cast<int>(count_hood(CALL) - 1), node.position());
-
-            field<std::tuple<int, vec<2>>> ngb_data = nbr(CALL, data);
-
-            std::tuple<int, vec<2>> min_data = min_hood(CALL, ngb_data);
-
-            if (std::get<1>(min_data) != node.position())
-            {
-                vec<2> direction = std::get<1>(min_data) - node.position();
-                node.velocity() = direction / norm(direction) * 10.0;
+            if(!follow_track(CALL, trace)) {
+                node.velocity() = make_vec(0, 0);
             }
-            else
-            {
-                node.velocity() = make_vec(0.0, 0.0);
-            }
-
-            node.storage(node_size{}) = 1 + net_max_neighbors;
+            
+            node.storage(node_size{}) = 5;
             node.storage(node_color{}) = color(GREEN);
             node.storage(node_shape{}) = shape::sphere;
         }
@@ -240,7 +215,7 @@ namespace fcpp
         using namespace coordination::tags;
 
         //! @brief Number of people in the area.
-        constexpr int node_num = 100;
+        constexpr int node_num = 10;
         //! @brief Dimensionality of the space.
         constexpr size_t dim = 2;
 
@@ -273,7 +248,7 @@ namespace fcpp
 
         //! @brief The general simulation options.
         DECLARE_OPTIONS(list,
-                        parallel<true>,                // multithreading enabled on node rounds
+                        parallel<false>,                // multithreading enabled on node rounds
                         synchronised<false>,           // optimise for asynchronous networks
                         program<coordination::main>,   // program to be run (refers to MAIN above)
                         exports<coordination::main_t>, // export type list (types used in messages)
@@ -281,6 +256,7 @@ namespace fcpp
                         round_schedule<round_s>,       // the sequence generator for round events on nodes
                         log_schedule<log_s>,           // the sequence generator for log events on the network
                         spawn_schedule<spawn_s>,       // the sequence generator of node creation events on the network
+                        net_store<gps_traces, fcpp::gps_trace>,
                         store_t,                       // the contents of the node storage
                         aggregator_t,                  // the tags and corresponding aggregators to be logged
                         init<
@@ -290,7 +266,12 @@ namespace fcpp
                         connector<connect::fixed<100, 1, dim>>, // connection allowed within a fixed comm range
                         shape_tag<node_shape>,                  // the shape of a node is read from this tag in the store
                         size_tag<node_size>,                    // the size  of a node is read from this tag in the store
-                        color_tag<node_color>                   // the color of a node is read from this tag in the store
+                        color_tag<node_color>,                   // the color of a node is read from this tag in the store
+
+                        tail_time_val<99999999999999, 1>,   // Trail duration: effectively infinite (num/den = large/1)
+                        tail_granularity<1, 10>,            // Snapshot rate
+                        tail_color_val<BLUE>,               // Trail color: blue
+                        tail_width_val<5, 1>                // Trail width: 5x node size (num/den = 5/1)
         );
 
     } // namespace option
@@ -302,10 +283,12 @@ int main()
 {
     using namespace fcpp;
 
+    static fcpp::gps_trace trace("C:/Users/loref/Documents/Unito/Tesi Triennale/Otscher.gpx", 47.86675, 15.16357, 833.15, 10);
+
     //! @brief The network object type (interactive simulator with given options).
     using net_t = component::interactive_simulator<option::list>::net;
     //! @brief The initialisation values (simulation name).
-    auto init_v = common::make_tagged_tuple<option::name>("Exercises");
+    auto init_v = common::make_tagged_tuple<option::name, option::gps_traces>("Exercises", trace);
     //! @brief Construct the network object.
     net_t network{init_v};
     //! @brief Run the simulation until exit.
